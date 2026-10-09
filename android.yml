@@ -1,0 +1,71 @@
+name: Compilar Autoarpa Android
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  pruebas-audio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar proyecto (descomprime el zip si se subio asi)
+        id: raiz
+        shell: bash
+        run: |
+          buscar() { find . -name settings.gradle.kts -not -path './.git/*' -not -path './_proyecto/*/*/*/*/*' | awk '{ print length, $0 }' | sort -n | head -1 | cut -d' ' -f2-; }
+          F=$(buscar)
+          if [ -z "$F" ]; then
+            for Z in $(find . -maxdepth 2 -name '*.zip' -not -path './.git/*'); do
+              D="_proyecto/$(basename "$Z" .zip)"; mkdir -p "$D"; unzip -o -q "$Z" -d "$D"; echo "Descomprimido: $Z"
+            done
+            F=$(buscar)
+          fi
+          if [ -z "$F" ]; then echo "::error::No encontre settings.gradle.kts. Archivos:"; find . -not -path './.git/*' -type f | head -80; exit 1; fi
+          echo "root=$(dirname "$F")" >> "$GITHUB_OUTPUT"
+      - name: Prueba del nucleo de audio (C++)
+        working-directory: ${{ steps.raiz.outputs.root }}/tests
+        run: |
+          g++ -O2 -std=c++17 -I../app/src/main/cpp synth_test.cpp ../app/src/main/cpp/synth.cpp -o synth_test
+          ./synth_test
+
+  apk:
+    needs: pruebas-audio
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar proyecto (descomprime el zip si se subio asi)
+        id: raiz
+        shell: bash
+        run: |
+          buscar() { find . -name settings.gradle.kts -not -path './.git/*' -not -path './_proyecto/*/*/*/*/*' | awk '{ print length, $0 }' | sort -n | head -1 | cut -d' ' -f2-; }
+          F=$(buscar)
+          if [ -z "$F" ]; then
+            for Z in $(find . -maxdepth 2 -name '*.zip' -not -path './.git/*'); do
+              D="_proyecto/$(basename "$Z" .zip)"; mkdir -p "$D"; unzip -o -q "$Z" -d "$D"
+            done
+            F=$(buscar)
+          fi
+          echo "root=$(dirname "$F")" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Instalar componentes de Android (SDK 34, NDK, CMake)
+        shell: bash
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+      - name: Compilar APK
+        working-directory: ${{ steps.raiz.outputs.root }}
+        run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Subir APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoarpaAndroid-APK
+          path: ${{ steps.raiz.outputs.root }}/app/build/outputs/apk/debug/*.apk

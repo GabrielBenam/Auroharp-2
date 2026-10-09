@@ -1,0 +1,118 @@
+name: Compilar Autoarpa Lab
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar proyecto (descomprime el zip si se subio asi)
+        id: raiz
+        shell: bash
+        run: |
+          buscar() { find . -name package.json -not -path '*/node_modules/*' -not -path './.git/*' | awk '{ print length, $0 }' | sort -n | head -1 | cut -d' ' -f2-; }
+          PKG=$(buscar)
+          if [ -z "$PKG" ]; then
+            for Z in $(find . -maxdepth 2 -name '*.zip' -not -path './.git/*'); do
+              D="_proyecto/$(basename "$Z" .zip)"; mkdir -p "$D"
+              if command -v unzip >/dev/null; then unzip -o -q "$Z" -d "$D"; else 7z x -y -o"$D" "$Z" >/dev/null; fi
+              echo "Descomprimido: $Z"
+            done
+            PKG=$(buscar)
+          fi
+          if [ -z "$PKG" ]; then
+            echo "::error::No encontre package.json ni un zip que lo contenga. Archivos en el repositorio:"; find . -not -path './.git/*' -type f | head -100; exit 1
+          fi
+          ROOT=$(dirname "$PKG"); echo "Proyecto en: $ROOT"
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Pruebas del motor de acordes
+        working-directory: ${{ steps.raiz.outputs.root }}
+        shell: bash
+        run: |
+          if [ -f tests/engine.test.js ]; then node tests/engine.test.js
+          else echo "::warning::No hay carpeta tests; se omiten las pruebas."; fi
+
+  windows:
+    needs: pruebas
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar proyecto (descomprime el zip si se subio asi)
+        id: raiz
+        run: |
+          buscar() { find . -name package.json -not -path '*/node_modules/*' -not -path './.git/*' | awk '{ print length, $0 }' | sort -n | head -1 | cut -d' ' -f2-; }
+          PKG=$(buscar)
+          if [ -z "$PKG" ]; then
+            for Z in $(find . -maxdepth 2 -name '*.zip' -not -path './.git/*'); do
+              D="_proyecto/$(basename "$Z" .zip)"; mkdir -p "$D"
+              if command -v unzip >/dev/null; then unzip -o -q "$Z" -d "$D"; else 7z x -y -o"$D" "$Z" >/dev/null; fi
+            done
+            PKG=$(buscar)
+          fi
+          ROOT=$(dirname "$PKG"); echo "Proyecto en: $ROOT"
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependencias
+        working-directory: ${{ steps.raiz.outputs.root }}
+        run: npm install --no-audit --no-fund
+      - name: Compilar instalador y portable
+        working-directory: ${{ steps.raiz.outputs.root }}
+        run: npx electron-builder --win nsis portable --publish never
+      - name: Subir ejecutables
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoarpaLab-Windows
+          path: ${{ steps.raiz.outputs.root }}/dist/*.exe
+      - name: Publicar release (solo con etiqueta v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.raiz.outputs.root }}/dist/*.exe
+
+  web:
+    needs: pruebas
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar sitio
+        shell: bash
+        run: |
+          buscar() { find . -name package.json -not -path '*/node_modules/*' -not -path './.git/*' -not -path './_site/*' | awk '{ print length, $0 }' | sort -n | head -1 | cut -d' ' -f2-; }
+          PKG=$(buscar)
+          if [ -z "$PKG" ]; then
+            for Z in $(find . -maxdepth 2 -name '*.zip' -not -path './.git/*'); do
+              D="_proyecto/$(basename "$Z" .zip)"; mkdir -p "$D"; unzip -o -q "$Z" -d "$D"
+            done
+            PKG=$(buscar)
+          fi
+          ROOT=$(dirname "$PKG")
+          mkdir -p _site
+          cp -r "$ROOT/index.html" "$ROOT/styles.css" "$ROOT/src" _site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

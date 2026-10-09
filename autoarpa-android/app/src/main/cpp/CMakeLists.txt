@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(autoarpa LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+find_package(oboe REQUIRED CONFIG)
+add_library(autoarpa SHARED native-lib.cpp synth.cpp)
+target_compile_options(autoarpa PRIVATE -O3 -ffast-math)
+target_link_libraries(autoarpa oboe::oboe log)

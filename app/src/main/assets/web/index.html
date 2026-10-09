@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autoarpa Lab</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="animBar" class="anim-bar" hidden>
+  <button id="anPlay" class="primary" title="Reproducir / pausar el ejemplo">Pausa</button>
+  <button id="anSlow" class="ghost" title="Más lento">−</button>
+  <span id="anSpeed" class="an-speed">1×</span>
+  <button id="anFast" class="ghost" title="Más rápido">+</button>
+  <button id="anRestart" class="ghost" title="Volver al inicio">Reiniciar</button>
+  <span id="anText" class="an-text"></span>
+  <button id="anClose" class="ghost" title="Cerrar el ejemplo">Cerrar</button>
+</div>
+<header class="top">
+  <div class="brand"><span class="logo" aria-hidden="true">
+    <svg viewBox="0 0 32 32" width="26" height="26"><path d="M6 28 L6 6 Q6 3 9 3 L26 10 Q28 11 28 13 L28 28 Z" fill="none" stroke="currentColor" stroke-width="2"/><g stroke="currentColor" stroke-width="1"><line x1="10" y1="7" x2="10" y2="27"/><line x1="14" y1="8" x2="14" y2="27"/><line x1="18" y1="9" x2="18" y2="27"/><line x1="22" y1="10" x2="22" y2="27"/></g></svg>
+  </span><span>Autoarpa <b>Lab</b></span></div>
+  <div class="toolbar">
+    <label class="sel">Layout <select id="layoutSel"></select></label>
+    <button id="btnImport" class="ghost" title="Abrir layout desde archivo JSON">Abrir</button>
+    <button id="btnExport" class="ghost" title="Guardar layout como archivo JSON">Guardar</button>
+    <input type="file" id="fileInput" accept=".json,application/json" hidden>
+    <label class="vol" title="Volumen">Vol <input type="range" id="vol" min="0" max="1" step="0.05" value="0.7"></label>
+    <button id="btnTheme" class="ghost" title="Tema claro/oscuro">Tema</button>
+    <button id="btnEmbedClose" class="primary embed-only">Cerrar</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="play" class="active">Tocar</button>
+  <button role="tab" data-tab="search">Buscador</button>
+  <button role="tab" data-tab="coverage">Cobertura</button>
+  <button role="tab" data-tab="optimize">Optimizador</button>
+  <button role="tab" data-tab="editor">Editor de barras</button>
+  <button role="tab" data-tab="settings" class="embed-only">Ajustes</button>
+  <button role="tab" data-tab="help">Ayuda</button>
+</nav>
+
+<main>
+  <!-- TOCAR -->
+  <section id="tab-play" class="tab active">
+    <div class="play-grid">
+      <div class="panel">
+        <div class="panel-h"><h2>Botonera</h2><span class="hint">Clic o teclado · varias barras = intersección</span></div>
+        <div id="bars" class="bars"></div>
+        <div class="row gap">
+          <button id="btnRelease" class="ghost">Soltar barras</button>
+          <label class="chk"><input type="checkbox" id="latch"> Mantener presionadas (toggle)</label>
+        </div>
+      </div>
+      <div class="panel readout">
+        <div class="chord-big" id="chordName">—</div>
+        <div class="chord-sub" id="chordInfo">Presiona una o más barras</div>
+        <div class="meter"><div id="chordMeter"></div></div>
+        <div id="chordAlt" class="alts"></div>
+        <div class="notes" id="chordNotes"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h2>Encordado</h2>
+        <div class="row gap">
+          <label class="sel">Zona <select id="zoneSel"></select></label>
+          <label class="sel">Velocidad <input type="range" id="strumMs" min="4" max="40" value="14"></label>
+          <button id="btnStrum" class="primary">Rasguear (Espacio)</button>
+          <button id="btnDamp" class="ghost">Apagar (Esc)</button>
+        </div>
+      </div>
+      <canvas id="bed" height="260"></canvas>
+      <p class="hint">Arrastra sobre las cuerdas para rasguear, clic en una cuerda para pulsarla. Cuerdas apagadas por fieltro en gris. Al presionar una barra se apagan las cuerdas que vibraban bajo su fieltro.</p>
+    </div>
+  </section>
+
+  <!-- BUSCADOR -->
+  <section id="tab-search" class="tab">
+    <div class="panel">
+      <div class="panel-h"><h2>¿Cómo toco este acorde?</h2><button id="qBack" class="ghost embed-table-only">← Tabla</button></div>
+      <div class="row gap wrap">
+        <input id="qChord" class="big-input" placeholder="Ej. F#m7, Cmaj7, Bdim, G/B" autocomplete="off">
+        <select id="qRoot"></select><select id="qType"></select>
+        <label class="chk"><input type="checkbox" id="qPinch" checked> Permitir pinch (cuerdas pulsadas aparte)</label>
+        <label class="sel">Máx. botones <select id="qMaxB"><option>1</option><option>2</option><option selected>3</option></select></label>
+        <button id="qGo" class="primary">Buscar</button>
+      </div>
+      <div id="qTarget" class="target"></div>
+      <p class="hint">Orden: parecido menos costo de ejecución (botones extra, zona, pinch, alcance de la mano, pocas cuerdas, bajo invertido).</p>
+      <div id="qResults" class="results"></div>
+    </div>
+  </section>
+
+  <!-- COBERTURA -->
+  <section id="tab-coverage" class="tab">
+    <div class="panel">
+      <div class="panel-h"><h2>Mapa de cobertura</h2>
+        <div class="row gap"><label class="chk"><input type="checkbox" id="cPinch"> Incluir pinch</label><button id="cGo" class="primary">Calcular</button></div>
+      </div>
+      <p class="hint">Mejor parecido alcanzable para cada acorde con el layout actual. Clic en una celda para ver cómo tocarlo.</p>
+      <div id="cSummary" class="summary"></div>
+      <div class="table-wrap"><table id="cTable" class="heat"></table></div>
+      <div class="legend"><span class="lg exacto">Exacto</span><span class="lg funcional">Funcional ≥85%</span><span class="lg sustituto">Sustituto ≥70%</span><span class="lg color">Color &lt;70%</span><span class="lg none">Sin opción</span></div>
+    </div>
+  </section>
+
+  <!-- OPTIMIZADOR -->
+  <section id="tab-optimize" class="tab">
+    <div class="panel">
+      <div class="panel-h"><h2>Optimizador de re-fieltrado</h2></div>
+      <p class="hint">Escribe los acordes de tus canciones (repetidos o con peso, ej. <code>A:4 E:3 F#m:2 Bm</code>). El optimizador propone qué barras re-fieltrar para cubrirlos mejor, sin tocar las barras bloqueadas ni las que tu repertorio ya usa.</p>
+      <textarea id="oRep" rows="4">G:4 C:3 D:3 Em:2 Bm:1 D7:2 Am:1 E:1 A7:1</textarea>
+      <div class="row gap wrap">
+        <label class="sel">Barras a cambiar <select id="oSteps"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select></label>
+        <label class="sel">Bloqueadas <input id="oLocked" value="B7" size="14"></label>
+        <button id="oGo" class="primary">Optimizar</button>
+        <button id="oApply" class="ghost" disabled>Usar layout propuesto</button>
+      </div>
+      <div id="oOut" class="results"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h2>Reacomodo de botones</h2></div>
+      <p class="hint">Mueve las barras entre posiciones sin re-fieltrar. Escribe tus progresiones en orden, una canción por línea. Minimiza el recorrido de la mano entre acordes consecutivos, junta las barras que se presionan a la vez (intersecciones), aleja de los extremos las barras más usadas (apagan peor) y premia el patrón de Smith: quintas de izquierda a derecha, relativo menor debajo del mayor y V7 arriba del I. Sin progresiones solo aplica el patrón armónico.</p>
+      <textarea id="aProg" rows="4">G C D Em G C D G
+C Am F G C Am F G
+D A Bm G D A G D
+G Em C D7 G</textarea>
+      <div class="row gap wrap">
+        <label class="chk"><input type="checkbox" id="aRows" checked> Solo mover dentro de cada fila (conserva filas de mayores, séptimas y menores)</label>
+        <label class="sel">Fijas <input id="aLocked" value="" size="14" placeholder="ej. B7 C"></label>
+        <button id="aGo" class="primary">Reacomodar</button>
+        <button id="aApply" class="ghost" disabled>Usar layout reacomodado</button>
+      </div>
+      <div id="aOut" class="results"></div>
+    </div>
+  </section>
+
+  <!-- EDITOR -->
+  <section id="tab-editor" class="tab">
+    <div class="panel">
+      <div class="panel-h"><h2>Editor de barras</h2><span class="hint">Selecciona una barra en la botonera de abajo</span></div>
+      <div id="eBars" class="bars small"></div>
+      <div class="row gap wrap">
+        <label class="sel">Etiqueta <input id="eLabel" size="8"></label>
+        <button id="eFromChord" class="ghost">Fieltrar según etiqueta</button>
+        <button id="eAdd" class="ghost">+ Barra en fila</button>
+        <button id="eDel" class="ghost">Eliminar barra</button>
+        <button id="eLeft" class="ghost">◀</button><button id="eRight" class="ghost">▶</button>
+        <button id="eUp" class="ghost">▲ fila</button><button id="eDown" class="ghost">▼ fila</button>
+        <button id="eHear" class="ghost">Escuchar</button>
+      </div>
+      <p class="hint">Cada casilla es una cuerda: encendida = suena (muesca en el fieltro), apagada = fieltro.</p>
+      <div id="eStrings" class="strings-grid"></div>
+      <div id="eInfo" class="notes"></div>
+      <div class="row gap wrap">
+        <label class="sel">Nombre del layout <input id="eName" size="26"></label>
+        <button id="eSave" class="primary">Guardar como layout propio</button>
+        <button id="eDelLayout" class="ghost">Borrar layout propio</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- AJUSTES (solo en la app Android) -->
+  <section id="tab-settings" class="tab">
+    <div class="panel">
+      <div class="panel-h"><h2>Ajustes de la app</h2></div>
+      <div id="setBox" class="set-box"></div>
+      <p class="hint">El layout activo se elige arriba y se aplica al instrumento al instante.</p>
+    </div>
+  </section>
+
+  <!-- AYUDA -->
+  <section id="tab-help" class="tab">
+    <div class="panel prose" id="helpBox"></div>
+  </section>
+</main>
+<div id="toast" class="toast" role="status"></div>
+
+<script src="src/theory.js"></script>
+<script src="src/felts.js"></script>
+<script src="src/instrument.js"></script>
+<script src="src/engine.js"></script>
+<script src="src/optimizer.js"></script>
+<script src="src/arranger.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/player.js"></script>
+<script src="src/ui.js"></script>
+</body>
+</html>

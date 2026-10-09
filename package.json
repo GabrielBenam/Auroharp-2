@@ -1,0 +1,27 @@
+{
+  "name": "autoarpa-lab",
+  "productName": "Autoarpa Lab",
+  "version": "0.3.0",
+  "description": "Autoarpa digital de 36 cuerdas con motor de acordes nuevos (intersección, zona y pinch), mapa de cobertura y optimizador de re-fieltrado.",
+  "author": "Gabriel Benam",
+  "license": "MIT",
+  "main": "electron/main.js",
+  "scripts": {
+    "test": "node tests/engine.test.js",
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis portable --publish never"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "io.github.gabrielbenam.autoarpalab",
+    "productName": "Autoarpa Lab",
+    "files": ["index.html", "styles.css", "src/**/*", "electron/**/*", "package.json"],
+    "directories": { "output": "dist" },
+    "win": { "target": ["nsis", "portable"] },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "artifactName": "AutoarpaLab-Setup-${version}.exe" },
+    "portable": { "artifactName": "AutoarpaLab-Portable-${version}.exe" }
+  }
+}

@@ -1,0 +1,189 @@
+name: Compilar Autoarpa (Windows, Android y web)
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Localizar proyectos (descomprime los zip que haya en el repositorio)
+        id: raiz
+        shell: bash
+        run: |
+          set -e
+          for Z in $(find . -maxdepth 2 -name '*.zip' -not -path './.git/*' -not -path './_proyecto/*'); do
+            D="_proyecto/$(basename "$Z" .zip)"; mkdir -p "$D"
+            if command -v unzip >/dev/null; then unzip -o -q "$Z" -d "$D"; else 7z x -y -o"$D" "$Z" >/dev/null; fi
+            echo "Descomprimido: $Z"
+          done
+          LAB=""; for P in $(find . -name package.json -not -path '*/node_modules/*' -not -path './.git/*' | awk '{ print length, $0 }' | sort -n | cut -d' ' -f2-); do
+            if grep -q electron-builder "$P"; then LAB=$(dirname "$P"); break; fi
+          done
+          AND=$(find . -name settings.gradle.kts -not -path './.git/*' | awk '{ print length, $0 }' | sort -n | head -1 | cut -d' ' -f2-)
+          [ -n "$AND" ] && AND=$(dirname "$AND")
+          echo "Laboratorio (escritorio/web): ${LAB:-no encontrado}"; echo "App Android: ${AND:-no encontrada}"
+          echo "lab=$LAB" >> "$GITHUB_OUTPUT"; echo "android=$AND" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Pruebas del motor de acordes y de la animacion (Node)
+        if: steps.raiz.outputs.lab != ''
+        working-directory: ${{ steps.raiz.outputs.lab }}
+        run: node tests/engine.test.js
+      - name: Pruebas del nucleo de audio (C++)
+        if: steps.raiz.outputs.android != ''
+        working-directory: ${{ steps.raiz.outputs.android }}/tests
+        run: |
+          g++ -O2 -std=c++17 -I../app/src/main/cpp synth_test.cpp ../app/src/main/cpp/synth.cpp -o synth_test
+          ./synth_test
+
+  windows:
+    needs: pruebas
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Localizar proyectos (descomprime los zip que haya en el repositorio)
+        id: raiz
+        run: |
+          set -e
+          for Z in $(find . -maxdepth 2 -name '*.zip' -not -path './.git/*' -not -path './_proyecto/*'); do
+            D="_proyecto/$(basename "$Z" .zip)"; mkdir -p "$D"
+            if command -v unzip >/dev/null; then unzip -o -q "$Z" -d "$D"; else 7z x -y -o"$D" "$Z" >/dev/null; fi
+            echo "Descomprimido: $Z"
+          done
+          LAB=""; for P in $(find . -name package.json -not -path '*/node_modules/*' -not -path './.git/*' | awk '{ print length, $0 }' | sort -n | cut -d' ' -f2-); do
+            if grep -q electron-builder "$P"; then LAB=$(dirname "$P"); break; fi
+          done
+          AND=$(find . -name settings.gradle.kts -not -path './.git/*' | awk '{ print length, $0 }' | sort -n | head -1 | cut -d' ' -f2-)
+          [ -n "$AND" ] && AND=$(dirname "$AND")
+          echo "Laboratorio (escritorio/web): ${LAB:-no encontrado}"; echo "App Android: ${AND:-no encontrada}"
+          echo "lab=$LAB" >> "$GITHUB_OUTPUT"; echo "android=$AND" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        if: steps.raiz.outputs.lab != ''
+        with:
+          node-version: 20
+      - name: Instalar dependencias
+        if: steps.raiz.outputs.lab != ''
+        working-directory: ${{ steps.raiz.outputs.lab }}
+        run: npm install --no-audit --no-fund
+      - name: Compilar instalador y portable
+        if: steps.raiz.outputs.lab != ''
+        working-directory: ${{ steps.raiz.outputs.lab }}
+        run: npx electron-builder --win nsis portable --publish never
+      - name: Subir ejecutables
+        if: steps.raiz.outputs.lab != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoarpaLab-Windows
+          path: ${{ steps.raiz.outputs.lab }}/dist/*.exe
+      - name: Publicar release (solo con etiqueta v*)
+        if: steps.raiz.outputs.lab != '' && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.raiz.outputs.lab }}/dist/*.exe
+
+  android:
+    needs: pruebas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Localizar proyectos (descomprime los zip que haya en el repositorio)
+        id: raiz
+        shell: bash
+        run: |
+          set -e
+          for Z in $(find . -maxdepth 2 -name '*.zip' -not -path './.git/*' -not -path './_proyecto/*'); do
+            D="_proyecto/$(basename "$Z" .zip)"; mkdir -p "$D"
+            if command -v unzip >/dev/null; then unzip -o -q "$Z" -d "$D"; else 7z x -y -o"$D" "$Z" >/dev/null; fi
+            echo "Descomprimido: $Z"
+          done
+          LAB=""; for P in $(find . -name package.json -not -path '*/node_modules/*' -not -path './.git/*' | awk '{ print length, $0 }' | sort -n | cut -d' ' -f2-); do
+            if grep -q electron-builder "$P"; then LAB=$(dirname "$P"); break; fi
+          done
+          AND=$(find . -name settings.gradle.kts -not -path './.git/*' | awk '{ print length, $0 }' | sort -n | head -1 | cut -d' ' -f2-)
+          [ -n "$AND" ] && AND=$(dirname "$AND")
+          echo "Laboratorio (escritorio/web): ${LAB:-no encontrado}"; echo "App Android: ${AND:-no encontrada}"
+          echo "lab=$LAB" >> "$GITHUB_OUTPUT"; echo "android=$AND" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@v4
+        if: steps.raiz.outputs.android != ''
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Instalar componentes de Android (SDK 34, NDK, CMake)
+        if: steps.raiz.outputs.android != ''
+        shell: bash
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.raiz.outputs.android != ''
+        with:
+          gradle-version: 8.9
+      - name: Compilar APK
+        if: steps.raiz.outputs.android != ''
+        working-directory: ${{ steps.raiz.outputs.android }}
+        run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Subir APK
+        if: steps.raiz.outputs.android != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoarpaAndroid-APK
+          path: ${{ steps.raiz.outputs.android }}/app/build/outputs/apk/debug/*.apk
+      - name: Publicar APK en la release (solo con etiqueta v*)
+        if: steps.raiz.outputs.android != '' && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.raiz.outputs.android }}/app/build/outputs/apk/debug/*.apk
+
+  web:
+    needs: pruebas
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Localizar proyectos (descomprime los zip que haya en el repositorio)
+        id: raiz
+        shell: bash
+        run: |
+          set -e
+          for Z in $(find . -maxdepth 2 -name '*.zip' -not -path './.git/*' -not -path './_proyecto/*'); do
+            D="_proyecto/$(basename "$Z" .zip)"; mkdir -p "$D"
+            if command -v unzip >/dev/null; then unzip -o -q "$Z" -d "$D"; else 7z x -y -o"$D" "$Z" >/dev/null; fi
+            echo "Descomprimido: $Z"
+          done
+          LAB=""; for P in $(find . -name package.json -not -path '*/node_modules/*' -not -path './.git/*' | awk '{ print length, $0 }' | sort -n | cut -d' ' -f2-); do
+            if grep -q electron-builder "$P"; then LAB=$(dirname "$P"); break; fi
+          done
+          AND=$(find . -name settings.gradle.kts -not -path './.git/*' | awk '{ print length, $0 }' | sort -n | head -1 | cut -d' ' -f2-)
+          [ -n "$AND" ] && AND=$(dirname "$AND")
+          echo "Laboratorio (escritorio/web): ${LAB:-no encontrado}"; echo "App Android: ${AND:-no encontrada}"
+          echo "lab=$LAB" >> "$GITHUB_OUTPUT"; echo "android=$AND" >> "$GITHUB_OUTPUT"
+      - name: Preparar sitio
+        if: steps.raiz.outputs.lab != ''
+        shell: bash
+        run: |
+          mkdir -p _site
+          cp -r "${{ steps.raiz.outputs.lab }}/index.html" "${{ steps.raiz.outputs.lab }}/styles.css" "${{ steps.raiz.outputs.lab }}/src" _site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
